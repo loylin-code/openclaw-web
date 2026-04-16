@@ -26,3 +26,14 @@ dist-ssr
 # Superpowers
 .superpowers/
 .playwright-mcp/
+
+# Environment files (contains sensitive tokens)
+.env
+.env.*
+!.env.example
+
+# Local SDK clone
+openclaw-webchat/
+
+# TypeScript build info
+tsconfig.tsbuildinfo

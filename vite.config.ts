@@ -17,5 +17,9 @@ export default defineConfig({
         ws: true
       }
     }
+  },
+  optimizeDeps: {
+    force: true,
+    exclude: ['openclaw-webchat']
   }
 })

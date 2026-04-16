@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { marked } from 'marked'
+import { marked, Renderer, type Tokens } from 'marked'
 import hljs from 'highlight.js'
 
 const props = defineProps<{
@@ -8,20 +8,37 @@ const props = defineProps<{
   streaming?: boolean
 }>()
 
-// 配置 marked 使用 highlight.js 进行代码高亮
-marked.setOptions({
-  highlight: function(code: string, lang: string) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return hljs.highlight(code, { language: lang }).value
-      } catch {
-        return code
-      }
+// 创建自定义渲染器以支持代码高亮
+const renderer = new Renderer()
+
+// 代码块渲染 - 使用新版 object 参数 API
+renderer.code = function({ text, lang }: Tokens.Code) {
+  const language = lang || ''
+  let highlightedCode: string
+  
+  if (language && hljs.getLanguage(language)) {
+    try {
+      highlightedCode = hljs.highlight(text, { language }).value
+    } catch {
+      highlightedCode = hljs.highlightAuto(text).value
     }
-    return hljs.highlightAuto(code).value
-  },
-  breaks: true, // 支持 GFM 换行
-  gfm: true // GitHub Flavored Markdown
+  } else {
+    highlightedCode = hljs.highlightAuto(text).value
+  }
+  
+  return `<pre><code class="hljs language-${language}">${highlightedCode}</code></pre>`
+}
+
+// 行内代码渲染 - 使用新版 object 参数 API
+renderer.codespan = function({ text }: Tokens.Codespan) {
+  return `<code class="inline-code">${text}</code>`
+}
+
+// 配置 marked
+marked.setOptions({
+  renderer,
+  breaks: true,
+  gfm: true
 })
 
 // 渲染 Markdown
