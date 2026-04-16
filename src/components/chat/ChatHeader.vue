@@ -5,10 +5,6 @@ import { computed } from 'vue'
 const store = useChatStore()
 
 const agentOptions = computed(() => store.agents)
-const currentAgentName = computed(() => {
-  const agent = store.agents.find(a => a.id === store.currentAgent)
-  return agent?.name || 'Default Agent'
-})
 
 function handleNewSession() {
   store.clearMessages()

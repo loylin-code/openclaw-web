@@ -5,6 +5,14 @@ const props = defineProps<{
   link: LinkPreviewType
 }>()
 
+function getHostname(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
+}
+
 function openLink() {
   window.open(props.link.url, '_blank', 'noopener,noreferrer')
 }
@@ -18,7 +26,7 @@ function openLink() {
       </div>
       <div class="flex-1 min-w-0">
         <p class="text-sm font-medium text-slate-800 truncate">{{ link.title }}</p>
-        <p class="text-xs text-slate-400 truncate">{{ link.siteName || new URL(link.url).hostname }}</p>
+        <p class="text-xs text-slate-400 truncate">{{ link.siteName || getHostname(link.url) }}</p>
         <p v-if="link.description" class="text-xs text-slate-600 mt-1 line-clamp-2">{{ link.description }}</p>
       </div>
     </div>

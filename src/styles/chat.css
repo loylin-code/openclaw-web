@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom component styles */
+.typing-cursor::after {
+  content: '▊';
+  animation: cursor-blink 1s step-end infinite;
+  margin-left: 2px;
+  color: #3b82f6;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.btn-hover {
+  @apply hover:opacity-90 transition-opacity;
+}

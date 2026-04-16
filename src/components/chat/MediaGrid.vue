@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MediaContent } from '@/types/chat'
 
-const props = defineProps<{
+defineProps<{
   items: MediaContent[]
 }>()
 </script>

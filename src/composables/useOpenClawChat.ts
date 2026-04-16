@@ -1,7 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '@/stores/chatStore'
 import { getGatewayConfig } from '@/config/gateway'
-import type { Message, StreamChunk, ToolEvent, ConnectionState } from '@/types/chat'
+import type { Message, ConnectionState } from '@/types/chat'
 
 // OpenClawClient 类型（来自 SDK）
 interface OpenClawClient {
@@ -9,8 +9,8 @@ interface OpenClawClient {
   disconnect: () => void
   send: (message: string) => Promise<void>
   getHistory: () => Promise<Message[]>
-  on: (event: string, handler: (data: any) => void) => void
-  off: (event: string, handler: (data: any) => void) => void
+  on: (event: string, handler: (...args: any[]) => void) => void
+  off: (event: string, handler: (...args: any[]) => void) => void
 }
 
 export function useOpenClawChat() {
@@ -47,26 +47,13 @@ export function useOpenClawChat() {
   }
   
   // 处理流式 Chunk
-  function handleStreamChunk(data: StreamChunk) {
-    store.updateMessageContent(data.messageId, data.content)
-    
-    if (data.done) {
-      store.finishMessage(data.messageId)
-    }
+  function handleStreamChunk(messageId: string, chunk: string) {
+    store.updateMessageContent(messageId, chunk)
   }
   
-  // 处理工具事件
-  function handleToolEvent(data: ToolEvent) {
-    if (data.type === 'tool_use') {
-      store.addToolCall({
-        id: data.toolId,
-        name: data.toolName,
-        status: 'running',
-        input: data.input
-      })
-    } else if (data.type === 'tool_result') {
-      store.updateToolStatus(data.toolId, 'completed', data.output)
-    }
+  // 处理流结束
+  function handleStreamEnd(messageId: string) {
+    store.finishMessage(messageId)
   }
   
   // 处理连接状态
@@ -86,23 +73,30 @@ export function useOpenClawChat() {
       // 动态导入 SDK
       const { OpenClawClient } = await import('openclaw-webchat')
       
-      client.value = new OpenClawClient({
+      const clientInstance = new OpenClawClient({
         gateway: config.url,
         token: config.token,
         reconnect: config.reconnect,
         reconnectInterval: config.reconnectInterval
       })
       
-      // 注册事件监听
-      client.value.on('message', handleMessage)
-      client.value.on('streamChunk', handleStreamChunk)
-      client.value.on('toolUse', handleToolEvent)
-      client.value.on('toolResult', handleToolEvent)
-      client.value.on('connected', () => handleConnectionChange('connected'))
-      client.value.on('disconnected', () => handleConnectionChange('disconnected'))
-      client.value.on('error', handleError)
+      client.value = clientInstance as unknown as OpenClawClient
       
-      await client.value.connect()
+      // 注册事件监听
+      clientInstance.on('message', handleMessage)
+      clientInstance.on('streamStart', (_messageId: string) => {
+        // 流开始，可以设置 streaming 状态
+      })
+      clientInstance.on('streamChunk', handleStreamChunk)
+      clientInstance.on('streamEnd', handleStreamEnd)
+      clientInstance.on('connected', () => handleConnectionChange('connected'))
+      clientInstance.on('disconnected', () => handleConnectionChange('disconnected'))
+      clientInstance.on('error', handleError)
+      clientInstance.on('stateChange', (_state: any) => {
+        // 状态变化时可以更新 UI
+      })
+      
+      await clientInstance.connect()
       store.setConnectionState('connected')
       
     } catch (err: any) {
