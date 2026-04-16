@@ -1,17 +1,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '@/stores/chatStore'
 import { getGatewayConfig } from '@/config/gateway'
-import type { Message, ConnectionState } from '@/types/chat'
-
-// OpenClawClient 类型（来自 SDK）
-interface OpenClawClient {
-  connect: () => Promise<void>
-  disconnect: () => void
-  send: (message: string) => Promise<void>
-  getHistory: () => Promise<Message[]>
-  on: (event: string, handler: (...args: any[]) => void) => void
-  off: (event: string, handler: (...args: any[]) => void) => void
-}
+import type { Message } from '@/types/chat'
+import type { OpenClawClient, OpenClawClientOptions } from 'openclaw-webchat'
 
 export function useOpenClawChat() {
   const store = useChatStore()
@@ -26,24 +17,15 @@ export function useOpenClawChat() {
   }
   
   // 处理消息事件
-  function handleMessage(data: any) {
-    const message: Message = {
-      id: data.id || generateId(),
-      role: data.role,
-      content: data.content,
-      timestamp: data.timestamp || Date.now(),
-      streaming: data.streaming ?? false,
-      codeBlocks: data.codeBlocks,
-      media: data.media,
-      links: data.links,
-      files: data.files,
-      toolCalls: data.toolCalls
-    }
-    store.addMessage(message)
-    
-    if (message.streaming) {
-      store.setStreaming(true)
-    }
+  function handleMessage(message: Message) {
+    store.addMessage({
+      id: message.id || generateId(),
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp || Date.now(),
+      streaming: false,
+      metadata: message.metadata
+    })
   }
   
   // 处理流式 Chunk
@@ -57,56 +39,97 @@ export function useOpenClawChat() {
   }
   
   // 处理连接状态
-  function handleConnectionChange(state: ConnectionState) {
-    store.setConnectionState(state)
+  function handleConnected() {
+    console.log('[OpenClaw] Connected to gateway')
+    store.setConnectionState('connected')
+    error.value = null
+  }
+  
+  // 处理断开连接
+  function handleDisconnected(reason?: string) {
+    console.log('[OpenClaw] Disconnected:', reason)
+    store.setConnectionState('disconnected')
   }
   
   // 处理错误
-  function handleError(err: any) {
+  function handleError(err: Error) {
+    console.error('[OpenClaw] Error:', err.message)
     error.value = err.message || '连接错误'
     store.setConnectionState('error')
+  }
+  
+  // 处理重连
+  function handleReconnecting(attempt: number) {
+    console.log('[OpenClaw] Reconnecting, attempt:', attempt)
+    store.setConnectionState('connecting')
+  }
+  
+  // 处理状态变化
+  function handleStateChange(state: { connectionState: string }) {
+    console.log('[OpenClaw] State changed:', state.connectionState)
+    store.setConnectionState(state.connectionState as any)
   }
   
   // 连接
   async function connect() {
     try {
+      console.log('[OpenClaw] Connecting to:', config.url)
+      console.log('[OpenClaw] Token:', config.token ? 'provided' : 'not provided')
+      
       // 动态导入 SDK
       const { OpenClawClient } = await import('openclaw-webchat')
       
-      const clientInstance = new OpenClawClient({
+      // 构建配置选项
+      const options: OpenClawClientOptions = {
         gateway: config.url,
-        token: config.token,
         reconnect: config.reconnect,
-        reconnectInterval: config.reconnectInterval
-      })
+        reconnectInterval: config.reconnectInterval,
+        debug: config.debug
+      }
       
-      client.value = clientInstance as unknown as OpenClawClient
+      // 只有 token 存在时才添加
+      if (config.token) {
+        options.token = config.token
+      }
+      
+      console.log('[OpenClaw] Client options:', { ...options, token: options.token ? '***' : undefined })
+      
+      const clientInstance = new OpenClawClient(options)
+      client.value = clientInstance
       
       // 注册事件监听
+      clientInstance.on('connected', handleConnected)
+      clientInstance.on('disconnected', handleDisconnected)
+      clientInstance.on('error', handleError)
+      clientInstance.on('reconnecting', handleReconnecting)
+      clientInstance.on('stateChange', handleStateChange)
       clientInstance.on('message', handleMessage)
-      clientInstance.on('streamStart', (_messageId: string) => {
-        // 流开始，可以设置 streaming 状态
+      clientInstance.on('streamStart', (messageId: string) => {
+        console.log('[OpenClaw] Stream start:', messageId)
+        store.setStreaming(true)
       })
       clientInstance.on('streamChunk', handleStreamChunk)
       clientInstance.on('streamEnd', handleStreamEnd)
-      clientInstance.on('connected', () => handleConnectionChange('connected'))
-      clientInstance.on('disconnected', () => handleConnectionChange('disconnected'))
-      clientInstance.on('error', handleError)
-      clientInstance.on('stateChange', (_state: any) => {
-        // 状态变化时可以更新 UI
-      })
       
+      // 尝试连接
       await clientInstance.connect()
-      store.setConnectionState('connected')
+      
+      console.log('[OpenClaw] Connect promise resolved')
+      console.log('[OpenClaw] isConnected:', clientInstance.isConnected)
+      console.log('[OpenClaw] connectionState:', clientInstance.connectionState)
       
     } catch (err: any) {
+      console.error('[OpenClaw] Connection failed:', err)
       handleError(err)
     }
   }
   
   // 发送消息
   async function sendMessage(content: string) {
-    if (!client.value || !content.trim()) return
+    if (!client.value || !content.trim()) {
+      console.warn('[OpenClaw] Cannot send: client not connected or empty content')
+      return
+    }
     
     // 先添加用户消息
     store.addMessage({
@@ -117,8 +140,10 @@ export function useOpenClawChat() {
     })
     
     try {
+      console.log('[OpenClaw] Sending message:', content.substring(0, 50))
       await client.value.send(content)
     } catch (err: any) {
+      console.error('[OpenClaw] Send failed:', err)
       error.value = err.message
     }
   }
@@ -126,6 +151,7 @@ export function useOpenClawChat() {
   // 断开连接
   function disconnect() {
     if (client.value) {
+      console.log('[OpenClaw] Disconnecting...')
       client.value.disconnect()
       client.value = null
       store.setConnectionState('disconnected')
@@ -137,19 +163,22 @@ export function useOpenClawChat() {
     if (!client.value) return
     
     try {
-      const history = await client.value.getHistory()
+      const history = await client.value.getHistory(50)
       history.forEach(msg => store.addMessage(msg))
     } catch (err: any) {
+      console.error('[OpenClaw] Load history failed:', err)
       error.value = err.message
     }
   }
   
   // 生命周期
   onMounted(() => {
+    console.log('[OpenClaw] Component mounted, starting connection...')
     connect()
   })
   
   onUnmounted(() => {
+    console.log('[OpenClaw] Component unmounted, disconnecting...')
     disconnect()
   })
   

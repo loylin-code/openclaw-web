@@ -5,6 +5,7 @@ export interface Message {
   content: string
   timestamp: number
   streaming?: boolean
+  metadata?: Record<string, unknown>
   
   // 附加内容
   codeBlocks?: CodeBlock[]
@@ -64,8 +65,8 @@ export interface Agent {
   model?: string
 }
 
-// 连接状态
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error'
+// 连接状态（扩展以匹配 SDK）
+export type ConnectionState = 'disconnected' | 'connecting' | 'authenticating' | 'connected' | 'reconnecting' | 'error'
 
 // 流式响应 Chunk
 export interface StreamChunk {
