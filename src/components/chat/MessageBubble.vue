@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Message } from '@/types/chat'
+import MarkdownContent from './MarkdownContent.vue'
+import CodeBlock from './CodeBlock.vue'
+import ToolStatus from './ToolStatus.vue'
+import MediaGrid from './MediaGrid.vue'
+import LinkPreview from './LinkPreview.vue'
+import FileAttachment from './FileAttachment.vue'
 
 const props = defineProps<{
   message: Message
@@ -13,13 +19,22 @@ const formattedTime = computed(() => {
   const date = new Date(props.message.timestamp)
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 })
+
+// 是否有附加内容
+const hasAttachments = computed(() => {
+  return props.message.codeBlocks?.length ||
+         props.message.media?.length ||
+         props.message.links?.length ||
+         props.message.files?.length ||
+         props.message.toolCalls?.length
+})
 </script>
 
 <template>
   <div :class="isUser ? 'flex justify-end' : 'flex justify-start'">
     <!-- 用户消息 -->
     <div v-if="isUser" class="bubble-user px-5 py-3 max-w-lg shadow-md">
-      <p class="text-sm leading-relaxed">{{ message.content }}</p>
+      <MarkdownContent :content="message.content" />
     </div>
     
     <!-- AI 消息 -->
@@ -36,11 +51,42 @@ const formattedTime = computed(() => {
       </div>
       
       <div class="bubble-ai p-5">
-        <p class="text-sm leading-relaxed text-slate-700">
-          {{ message.content }}
-          <span v-if="message.streaming" class="typing-cursor"></span>
-        </p>
+        <!-- Markdown 内容渲染 -->
+        <MarkdownContent :content="message.content" :streaming="message.streaming" />
         
+        <!-- 附加内容 -->
+        <div v-if="hasAttachments && !message.streaming">
+          <!-- 代码块 -->
+          <div v-if="message.codeBlocks?.length" class="mt-4 space-y-3">
+            <CodeBlock 
+              v-for="(block, idx) in message.codeBlocks" 
+              :key="idx"
+              :code="block.code"
+              :language="block.language"
+              :filename="block.filename"
+            />
+          </div>
+          
+          <!-- 图片网格 -->
+          <MediaGrid v-if="message.media?.length" :items="message.media" class="mt-4" />
+          
+          <!-- 链接预览 -->
+          <div v-if="message.links?.length" class="mt-3 space-y-2">
+            <LinkPreview v-for="(link, idx) in message.links" :key="idx" :link="link" />
+          </div>
+          
+          <!-- 文件附件 -->
+          <div v-if="message.files?.length" class="mt-3 space-y-2">
+            <FileAttachment v-for="(file, idx) in message.files" :key="idx" :file="file" />
+          </div>
+          
+          <!-- 工具调用 -->
+          <div v-if="message.toolCalls?.length" class="mt-4 space-y-2">
+            <ToolStatus v-for="(tool, idx) in message.toolCalls" :key="idx" :tool="tool" />
+          </div>
+        </div>
+        
+        <!-- 操作按钮 -->
         <div v-if="!message.streaming" class="flex gap-2 mt-4 pt-4 border-t border-slate-100">
           <button class="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-blue-300 hover:text-blue-600 transition">
             👍 有帮助
@@ -71,17 +117,5 @@ const formattedTime = computed(() => {
   border: 1px solid #e2e8f0;
   border-radius: 20px 20px 20px 6px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
-.typing-cursor::after {
-  content: '▊';
-  animation: cursor-blink 1s step-end infinite;
-  margin-left: 2px;
-  color: #3b82f6;
-}
-
-@keyframes cursor-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
 }
 </style>
