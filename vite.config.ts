@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
+  base: './',  // 支持相对路径访问，可部署到任意子目录
   plugins: [vue()],
   resolve: {
     alias: {
