@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  openclaw-webchat@0.2.0:
+    hash: 7e901f4d87865ba7ca817fdec2cdc8bc58d227206a3ca35f8a6214e47c1dde4f
+    path: patches/openclaw-webchat@0.2.0.patch
+
 importers:
 
   .:
@@ -16,7 +21,7 @@ importers:
         version: 18.0.0
       openclaw-webchat:
         specifier: ^0.2.0
-        version: 0.2.0
+        version: 0.2.0(patch_hash=7e901f4d87865ba7ca817fdec2cdc8bc58d227206a3ca35f8a6214e47c1dde4f)
       pinia:
         specifier: ^3.0.1
         version: 3.0.4(typescript@5.7.3)(vue@3.5.32(typescript@5.7.3))
@@ -1940,7 +1945,7 @@ snapshots:
 
   obug@2.1.1: {}
 
-  openclaw-webchat@0.2.0: {}
+  openclaw-webchat@0.2.0(patch_hash=7e901f4d87865ba7ca817fdec2cdc8bc58d227206a3ca35f8a6214e47c1dde4f): {}
 
   package-json-from-dist@1.0.1: {}
 

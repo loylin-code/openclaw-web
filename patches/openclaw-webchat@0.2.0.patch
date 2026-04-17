@@ -1,0 +1,133 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 2d9c2a8491aacaf8c28c2e0750a38f303db44fa3..c9ccfb3f2d43e289469ca44b5f15a44be7ffb2e6 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -297,12 +297,12 @@ var OpenClawClient = class {
+       minProtocol: 3,
+       maxProtocol: 3,
+       client: {
+-        id: "webchat",
+-        version: this.options.clientVersion,
++        id: "openclaw-control-ui",
++        version: this.options.clientVersion || "2026.4.14",
+         platform: typeof window !== "undefined" ? "browser" : "node",
+-        mode: "node"
++        mode: "webchat"
+       },
+-      scopes: ["operator.read", "operator.write"],
++      scopes: ["operator.admin", "operator.read", "operator.write", "operator.approvals", "operator.pairing"],
+       auth: {}
+     };
+     if (this.deviceToken) {
+diff --git a/dist/index.js b/dist/index.js
+index 71f68be9fe1ceb8ae14ee3a5d7d97fb7dd37f5ff..25db2004319e10f8fd482e5463cdc7af56c1f742 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -222,6 +222,7 @@ var OpenClawClient = class {
+     }
+   }
+   handleEvent(frame) {
++    this.log("handleEvent:", frame.event, JSON.stringify(frame.payload).substring(0, 100));
+     switch (frame.event) {
+       case "connect.challenge":
+         this.log("Received challenge event, sending connect request...");
+@@ -246,7 +247,7 @@ var OpenClawClient = class {
+         this.handleChatEvent(frame.payload);
+         break;
+       case "agent":
+-        this.log("Agent event:", frame.payload);
++        this.handleAgentEvent(frame.payload);
+         break;
+       case "health":
+       case "tick":
+@@ -259,11 +260,73 @@ var OpenClawClient = class {
+   }
+   currentStreamingMessageId = null;
+   lastStreamedContent = "";
++  handleAgentEvent(payload) {
++    this.log("Agent event:", payload.type, payload);
++    // 处理工具调用开始
++    if (payload.type === "tool_use" || payload.toolUse) {
++      const toolData = payload.toolUse || payload;
++      this.emit("toolStart", {
++        id: toolData.id || toolData.toolId || `tool_${Date.now()}`,
++        name: toolData.name || toolData.toolName || "unknown",
++        input: toolData.input || toolData.args
++      });
++    }
++    // 处理工具调用结果
++    if (payload.type === "tool_result" || payload.toolResult) {
++      const toolData = payload.toolResult || payload;
++      this.emit("toolEnd", {
++        id: toolData.id || toolData.toolId || `tool_${Date.now()}`,
++        name: toolData.name || toolData.toolName || "unknown",
++        output: toolData.output || toolData.result,
++        error: toolData.error
++      });
++    }
++    // 处理 agent 状态更新（包含多个工具调用）
++    if (payload.tools) {
++      for (const tool of payload.tools) {
++        if (tool.status === "running") {
++          this.emit("toolStart", {
++            id: tool.id,
++            name: tool.name,
++            input: tool.input
++          });
++        } else if (tool.status === "completed" || tool.status === "error") {
++          this.emit("toolEnd", {
++            id: tool.id,
++            name: tool.name,
++            output: tool.output,
++            error: tool.error
++          });
++        }
++      }
++    }
++  }
+   handleChatEvent(payload) {
+     const chatPayload = payload;
+     this.log("Chat event:", chatPayload.state, "seq:", chatPayload.seq);
+     const messageId = chatPayload.runId || "stream";
+     const contentBlocks = chatPayload.message?.content || [];
++    
++    // 处理工具调用内容块
++    const toolUseBlocks = contentBlocks.filter((block) => block.type === "tool_use");
++    for (const block of toolUseBlocks) {
++      this.emit("toolStart", {
++        id: block.id || `tool_${Date.now()}`,
++        name: block.name,
++        input: block.input
++      });
++    }
++    
++    const toolResultBlocks = contentBlocks.filter((block) => block.type === "tool_result");
++    for (const block of toolResultBlocks) {
++      this.emit("toolEnd", {
++        id: block.tool_use_id || block.id || `tool_${Date.now()}`,
++        name: block.name || "tool",
++        output: block.content,
++        error: block.is_error ? block.content : undefined
++      });
++    }
++    
+     const fullContent = contentBlocks.filter((block) => block.type === "text").map((block) => block.text).join("");
+     if (!this.currentStreamingMessageId && chatPayload.state === "delta") {
+       this.currentStreamingMessageId = messageId;
+@@ -295,12 +358,12 @@ var OpenClawClient = class {
+       minProtocol: 3,
+       maxProtocol: 3,
+       client: {
+-        id: "webchat",
+-        version: this.options.clientVersion,
++        id: "openclaw-control-ui",
++        version: this.options.clientVersion || "2026.4.14",
+         platform: typeof window !== "undefined" ? "browser" : "node",
+-        mode: "node"
++        mode: "webchat"
+       },
+-      scopes: ["operator.read", "operator.write"],
++      scopes: ["operator.admin", "operator.read", "operator.write", "operator.approvals", "operator.pairing"],
+       auth: {}
+     };
+     if (this.deviceToken) {

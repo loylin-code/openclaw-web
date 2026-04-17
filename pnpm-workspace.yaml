@@ -1,0 +1,2 @@
+patchedDependencies:
+  openclaw-webchat@0.2.0: patches/openclaw-webchat@0.2.0.patch
